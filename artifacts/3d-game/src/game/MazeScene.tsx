@@ -6,6 +6,7 @@ import Player from "./Player";
 import Collectible from "./Collectible";
 import Obstacle from "./Obstacle";
 import ExitPortal from "./ExitPortal";
+import PlayerLight from "./PlayerLight";
 import HUD from "./HUD";
 import GameUI from "./GameUI";
 import { useGameStore } from "./useGameStore";
@@ -24,17 +25,8 @@ function SceneContent() {
 
   return (
     <>
-      <ambientLight intensity={0.15} color="#4400aa" />
-      <directionalLight
-        position={[10, 20, 10]}
-        intensity={0.3}
-        color="#6644cc"
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-      />
-      <pointLight position={[0, 10, 0]} intensity={0.5} color="#5522aa" distance={60} />
-      <fog attach="fog" args={["#0a0015", 5, 35]} />
+      <ambientLight intensity={0.6} color="#ccaaff" />
+      <fog attach="fog" args={["#0a0015", 8, 40]} />
 
       <Floor />
       <MazeWalls />
@@ -48,6 +40,7 @@ function SceneContent() {
         <Obstacle key={o.id} data={o} />
       ))}
 
+      <PlayerLight />
       <Player />
     </>
   );

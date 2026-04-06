@@ -67,8 +67,10 @@ export default function Player() {
       position.current.set(startPos[0], 1.6, startPos[2]);
       yaw.current = 0;
       pitch.current = 0;
+      camera.position.set(startPos[0], 1.6, startPos[2]);
+      camera.rotation.set(0, 0, 0);
     }
-  }, [gameState, startPos]);
+  }, [gameState, startPos, camera]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isLocked.current) return;

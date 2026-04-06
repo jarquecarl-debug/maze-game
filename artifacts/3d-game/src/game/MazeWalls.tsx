@@ -5,8 +5,8 @@ import { getWalls, WALL_HEIGHT, CELL_SIZE } from "./mazeData";
 export default function MazeWalls() {
   const walls = useMemo(() => getWalls(), []);
 
-  const wallColor = new THREE.Color(0x2a1a3a);
-  const topColor = new THREE.Color(0x3d2a5c);
+  const wallColor = new THREE.Color(0x4a3060);
+  const topColor = new THREE.Color(0x6a4a90);
 
   return (
     <group>
