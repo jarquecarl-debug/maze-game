@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useKeyboardControls } from "@react-three/drei";
@@ -13,7 +13,7 @@ enum Controls {
 }
 
 const MOVE_SPEED = 6;
-const MOUSE_SENSITIVITY = 0.002;
+const MOUSE_SENSITIVITY = 0.003;
 const PLAYER_RADIUS = 0.5;
 const COLLECT_RADIUS = 1.5;
 const OBSTACLE_RADIUS = 1.2;
@@ -40,7 +40,6 @@ function canMoveTo(x: number, z: number): boolean {
     [-PLAYER_RADIUS, PLAYER_RADIUS],
     [-PLAYER_RADIUS, -PLAYER_RADIUS],
   ];
-
   for (const [dx, dz] of offsets) {
     const [row, col] = worldToGrid(x + dx, z + dz);
     if (isWall(row, col)) return false;
@@ -49,13 +48,17 @@ function canMoveTo(x: number, z: number): boolean {
 }
 
 export default function Player() {
-  const { camera, gl } = useThree();
+  const { camera } = useThree();
   const [, getState] = useKeyboardControls<Controls>();
+
   const yaw = useRef(0);
   const pitch = useRef(0);
   const position = useRef(new THREE.Vector3());
   const damageCooldown = useRef(0);
-  const isLocked = useRef(false);
+  const isDragging = useRef(false);
+
+  // Track keys manually as fallback (handles iframe focus issues)
+  const keys = useRef<Record<string, boolean>>({});
 
   const { gameState, collectibles, obstacles, collectedIds, collectItem, takeDamage, winGame, updateTime } = useGameStore();
 
@@ -72,41 +75,59 @@ export default function Player() {
     }
   }, [gameState, startPos, camera]);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isLocked.current) return;
-    yaw.current -= e.movementX * MOUSE_SENSITIVITY;
-    pitch.current = Math.max(
-      -Math.PI / 3,
-      Math.min(Math.PI / 3, pitch.current - e.movementY * MOUSE_SENSITIVITY)
-    );
-  }, []);
-
-  const handleLockChange = useCallback(() => {
-    isLocked.current = document.pointerLockElement === gl.domElement;
-  }, [gl.domElement]);
-
+  // Direct key listeners so they work even inside iframes
   useEffect(() => {
-    const canvas = gl.domElement;
+    if (gameState !== "playing") return;
 
-    const handleClick = () => {
-      if (gameState === "playing" && !isLocked.current) {
-        canvas.requestPointerLock();
+    const onKeyDown = (e: KeyboardEvent) => {
+      keys.current[e.code] = true;
+      // Prevent arrow keys from scrolling
+      if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) {
+        e.preventDefault();
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      keys.current[e.code] = false;
+    };
 
-    canvas.addEventListener("click", handleClick);
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("pointerlockchange", handleLockChange);
-
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
     return () => {
-      canvas.removeEventListener("click", handleClick);
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("pointerlockchange", handleLockChange);
-      if (document.pointerLockElement === canvas) {
-        document.exitPointerLock();
-      }
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      keys.current = {};
     };
-  }, [gl.domElement, handleMouseMove, handleLockChange, gameState]);
+  }, [gameState]);
+
+  // Mouse drag to look
+  useEffect(() => {
+    if (gameState !== "playing") return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) isDragging.current = true;
+    };
+    const onMouseUp = () => {
+      isDragging.current = false;
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      yaw.current -= e.movementX * MOUSE_SENSITIVITY;
+      pitch.current = Math.max(
+        -Math.PI / 3,
+        Math.min(Math.PI / 3, pitch.current - e.movementY * MOUSE_SENSITIVITY)
+      );
+    };
+
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mousemove", onMouseMove);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mousemove", onMouseMove);
+      isDragging.current = false;
+    };
+  }, [gameState]);
 
   useFrame((_, delta) => {
     if (gameState !== "playing") return;
@@ -114,54 +135,60 @@ export default function Player() {
     updateTime(delta);
     damageCooldown.current = Math.max(0, damageCooldown.current - delta);
 
-    const controls = getState();
-    const forward = new THREE.Vector3(0, 0, -1);
-    forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw.current);
-    const right = new THREE.Vector3().crossVectors(
-      forward,
+    // Combine drei keyboard controls + direct key fallback
+    const drei = getState();
+    const forward =
+      drei.forward || keys.current["KeyW"] || keys.current["ArrowUp"];
+    const back =
+      drei.back || keys.current["KeyS"] || keys.current["ArrowDown"];
+    const left =
+      drei.left || keys.current["KeyA"] || keys.current["ArrowLeft"];
+    const right =
+      drei.right || keys.current["KeyD"] || keys.current["ArrowRight"];
+
+    const fwd = new THREE.Vector3(0, 0, -1).applyAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      yaw.current
+    );
+    const rgt = new THREE.Vector3().crossVectors(
+      fwd,
       new THREE.Vector3(0, 1, 0)
     );
 
     const moveDir = new THREE.Vector3();
-    if (controls.forward) moveDir.add(forward);
-    if (controls.back) moveDir.sub(forward);
-    if (controls.left) moveDir.sub(right);
-    if (controls.right) moveDir.add(right);
+    if (forward) moveDir.add(fwd);
+    if (back) moveDir.sub(fwd);
+    if (left) moveDir.sub(rgt);
+    if (right) moveDir.add(rgt);
 
     if (moveDir.length() > 0) {
       moveDir.normalize().multiplyScalar(MOVE_SPEED * delta);
-
       const newX = position.current.x + moveDir.x;
       const newZ = position.current.z + moveDir.z;
-
-      if (canMoveTo(newX, position.current.z)) {
-        position.current.x = newX;
-      }
-      if (canMoveTo(position.current.x, newZ)) {
-        position.current.z = newZ;
-      }
+      if (canMoveTo(newX, position.current.z)) position.current.x = newX;
+      if (canMoveTo(position.current.x, newZ)) position.current.z = newZ;
     }
 
-    camera.position.copy(position.current);
     const euler = new THREE.Euler(pitch.current, yaw.current, 0, "YXZ");
+    camera.position.copy(position.current);
     camera.quaternion.setFromEuler(euler);
 
+    // Collect items
     for (const c of collectibles) {
       if (collectedIds.has(c.id)) continue;
-      const dist = Math.sqrt(
-        (position.current.x - c.position[0]) ** 2 +
-        (position.current.z - c.position[2]) ** 2
+      const dist = Math.hypot(
+        position.current.x - c.position[0],
+        position.current.z - c.position[2]
       );
-      if (dist < COLLECT_RADIUS) {
-        collectItem(c.id, c.points);
-      }
+      if (dist < COLLECT_RADIUS) collectItem(c.id, c.points);
     }
 
+    // Obstacle damage
     if (damageCooldown.current <= 0) {
       for (const o of obstacles) {
-        const dist = Math.sqrt(
-          (position.current.x - o.position[0]) ** 2 +
-          (position.current.z - o.position[2]) ** 2
+        const dist = Math.hypot(
+          position.current.x - o.position[0],
+          position.current.z - o.position[2]
         );
         if (dist < OBSTACLE_RADIUS) {
           takeDamage(o.damage);
@@ -171,13 +198,12 @@ export default function Player() {
       }
     }
 
-    const distToExit = Math.sqrt(
-      (position.current.x - exitPos[0]) ** 2 +
-      (position.current.z - exitPos[2]) ** 2
+    // Exit check
+    const distToExit = Math.hypot(
+      position.current.x - exitPos[0],
+      position.current.z - exitPos[2]
     );
-    if (distToExit < 2) {
-      winGame();
-    }
+    if (distToExit < 2) winGame();
   });
 
   return null;

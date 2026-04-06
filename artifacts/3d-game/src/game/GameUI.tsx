@@ -23,7 +23,7 @@ export default function GameUI() {
           textAlign: "center",
         }}
       >
-        Click to lock mouse | WASD to move | Find the portal to escape
+        WASD / Arrow keys to move &nbsp;|&nbsp; Click &amp; drag to look around &nbsp;|&nbsp; Reach the glowing portal to escape
       </div>
     );
   }
@@ -100,8 +100,8 @@ export default function GameUI() {
                 <span style={{ color: "#ff6600" }}>Fire</span>,{" "}
                 <span style={{ color: "#44ff44" }}>Poison</span> will hurt you
                 <br />
-                Use <span style={{ color: "#fff" }}>WASD</span> to move,{" "}
-                <span style={{ color: "#fff" }}>Mouse</span> to look
+                <span style={{ color: "#fff" }}>WASD</span> / arrows to move,{" "}
+                <span style={{ color: "#fff" }}>click &amp; drag</span> to look
               </div>
             </div>
             <button
