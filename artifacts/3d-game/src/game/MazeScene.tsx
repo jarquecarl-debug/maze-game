@@ -25,8 +25,8 @@ function SceneContent() {
 
   return (
     <>
-      <ambientLight intensity={0.6} color="#ccaaff" />
-      <fog attach="fog" args={["#0a0015", 8, 40]} />
+      <ambientLight intensity={0.4} color="#ffffff" />
+      <fog attach="fog" args={["#110022", 18, 50]} />
 
       <Floor />
       <MazeWalls />
@@ -51,7 +51,6 @@ export default function MazeScene() {
     <div style={{ width: "100vw", height: "100vh", background: "#0a0015" }}>
       <KeyboardControls map={keyMap}>
         <Canvas
-          shadows
           camera={{ fov: 75, near: 0.1, far: 100, position: [0, 1.6, 0] }}
           style={{ width: "100%", height: "100%" }}
         >

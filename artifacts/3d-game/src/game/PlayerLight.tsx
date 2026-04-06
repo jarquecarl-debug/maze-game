@@ -15,10 +15,10 @@ export default function PlayerLight() {
   return (
     <pointLight
       ref={lightRef}
-      intensity={8}
-      distance={14}
+      intensity={12}
+      distance={18}
       decay={2}
-      color="#fff5dd"
+      color="#ffffff"
     />
   );
 }
