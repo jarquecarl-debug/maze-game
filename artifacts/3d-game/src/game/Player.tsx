@@ -1,8 +1,7 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { PointerLockControls } from "@react-three/drei";
 import * as THREE from "three";
-import type { PointerLockControls as PLCType } from "three/examples/jsm/controls/PointerLockControls.js";
 import { useGameStore } from "./useGameStore";
 import { MAZE_LAYOUT, CELL_SIZE, getExitPosition, getPlayerStart } from "./mazeData";
 
@@ -11,6 +10,7 @@ const PLAYER_RADIUS = 0.45;
 const COLLECT_RADIUS = 1.5;
 const OBSTACLE_RADIUS = 1.2;
 const EYE_HEIGHT = 1.6;
+const TIME_SYNC_INTERVAL = 0.25; // sync elapsed time to store every 250ms
 
 function worldToGrid(x: number, z: number): [number, number] {
   const cols = MAZE_LAYOUT[0].length;
@@ -26,13 +26,13 @@ function isWall(row: number, col: number): boolean {
 }
 
 function canMoveTo(x: number, z: number): boolean {
-  const checks = [
+  const corners = [
     [x + PLAYER_RADIUS, z + PLAYER_RADIUS],
     [x + PLAYER_RADIUS, z - PLAYER_RADIUS],
     [x - PLAYER_RADIUS, z + PLAYER_RADIUS],
     [x - PLAYER_RADIUS, z - PLAYER_RADIUS],
   ];
-  return checks.every(([cx, cz]) => {
+  return corners.every(([cx, cz]) => {
     const [row, col] = worldToGrid(cx, cz);
     return !isWall(row, col);
   });
@@ -44,15 +44,19 @@ interface PlayerProps {
 
 export default function Player({ onLockChange }: PlayerProps) {
   const { camera } = useThree();
-  const controlsRef = useRef<PLCType>(null);
+  const controlsRef = useRef<any>(null);
+
+  // Local refs — never cause React re-renders
   const posRef = useRef(new THREE.Vector3());
   const keysRef = useRef({ forward: false, back: false, left: false, right: false });
+  const localCollectedRef = useRef(new Set<string>());
   const damageCooldown = useRef(0);
+  const timeSyncAccum = useRef(0);
 
-  const { gameState, collectibles, obstacles, collectedIds, collectItem, takeDamage, winGame, updateTime } = useGameStore();
-  const exitPos = getExitPosition();
+  // Only subscribe to gameState — avoids re-renders on score/health/collectibles changes
+  const gameState = useGameStore((s) => s.gameState);
 
-  // Place player at start when game begins
+  // Place player at start when game begins; reset local collected tracking
   useEffect(() => {
     if (gameState === "playing") {
       const [sx, , sz] = getPlayerStart();
@@ -60,13 +64,16 @@ export default function Player({ onLockChange }: PlayerProps) {
       camera.position.set(sx, EYE_HEIGHT, sz);
       camera.rotation.set(0, 0, 0);
       keysRef.current = { forward: false, back: false, left: false, right: false };
+      localCollectedRef.current = new Set();
+      damageCooldown.current = 0;
+      timeSyncAccum.current = 0;
     }
     if (gameState !== "playing") {
       controlsRef.current?.unlock();
     }
   }, [gameState, camera]);
 
-  // Keyboard listeners attached directly to document
+  // Keyboard listeners
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
       if (e.code === "KeyW" || e.code === "ArrowUp")    keysRef.current.forward = true;
@@ -91,12 +98,12 @@ export default function Player({ onLockChange }: PlayerProps) {
   useFrame((_, delta) => {
     if (gameState !== "playing") return;
 
-    updateTime(delta);
-    damageCooldown.current = Math.max(0, damageCooldown.current - delta);
+    // Read store state imperatively — no subscription, no re-renders
+    const store = useGameStore.getState();
 
+    // === Movement ===
     const locked = controlsRef.current?.isLocked ?? false;
     if (locked) {
-      // Flat forward direction from camera (ignores vertical look pitch)
       const forward = new THREE.Vector3();
       camera.getWorldDirection(forward);
       forward.y = 0;
@@ -119,34 +126,50 @@ export default function Player({ onLockChange }: PlayerProps) {
         if (canMoveTo(posRef.current.x, nz)) posRef.current.z = nz;
       }
 
-      // Pin camera to player position (PointerLockControls manages rotation)
       camera.position.x = posRef.current.x;
       camera.position.y = EYE_HEIGHT;
       camera.position.z = posRef.current.z;
     }
 
-    // Item collection
-    for (const c of collectibles) {
-      if (collectedIds.has(c.id)) continue;
-      const d = Math.hypot(posRef.current.x - c.position[0], posRef.current.z - c.position[2]);
-      if (d < COLLECT_RADIUS) collectItem(c.id, c.points);
+    // === Item collection — check local ref first to skip already-collected items ===
+    for (const c of store.collectibles) {
+      if (localCollectedRef.current.has(c.id)) continue;
+      const dx = posRef.current.x - c.position[0];
+      const dz = posRef.current.z - c.position[2];
+      if (dx * dx + dz * dz < COLLECT_RADIUS * COLLECT_RADIUS) {
+        localCollectedRef.current.add(c.id); // mark immediately — no stutter on next frame
+        store.collectItem(c.id, c.points);   // async store update (may cause one re-render)
+      }
     }
 
-    // Obstacle damage
+    // === Obstacle damage (throttled by cooldown) ===
+    damageCooldown.current = Math.max(0, damageCooldown.current - delta);
     if (damageCooldown.current <= 0) {
-      for (const o of obstacles) {
-        const d = Math.hypot(posRef.current.x - o.position[0], posRef.current.z - o.position[2]);
-        if (d < OBSTACLE_RADIUS) {
-          takeDamage(o.damage);
+      for (const o of store.obstacles) {
+        const dx = posRef.current.x - o.position[0];
+        const dz = posRef.current.z - o.position[2];
+        if (dx * dx + dz * dz < OBSTACLE_RADIUS * OBSTACLE_RADIUS) {
+          store.takeDamage(o.damage);
           damageCooldown.current = 1.5;
           break;
         }
       }
     }
 
-    // Exit check
-    if (Math.hypot(posRef.current.x - exitPos[0], posRef.current.z - exitPos[2]) < 2) {
-      winGame();
+    // === Exit check ===
+    const exitPos = getExitPosition();
+    const ex = posRef.current.x - exitPos[0];
+    const ez = posRef.current.z - exitPos[2];
+    if (ex * ex + ez * ez < 4) {
+      store.winGame();
+      return;
+    }
+
+    // === Time — sync to store only every TIME_SYNC_INTERVAL seconds ===
+    timeSyncAccum.current += delta;
+    if (timeSyncAccum.current >= TIME_SYNC_INTERVAL) {
+      store.updateTime(timeSyncAccum.current);
+      timeSyncAccum.current = 0;
     }
   });
 
@@ -154,7 +177,7 @@ export default function Player({ onLockChange }: PlayerProps) {
 
   return (
     <PointerLockControls
-      ref={controlsRef as any}
+      ref={controlsRef}
       onLock={() => onLockChange(true)}
       onUnlock={() => onLockChange(false)}
     />
