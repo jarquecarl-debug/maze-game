@@ -1,3 +1,4 @@
+/// <reference types="@react-three/fiber" />
 import { MAZE_LAYOUT, CELL_SIZE } from "./mazeData";
 import * as THREE from "three";
 

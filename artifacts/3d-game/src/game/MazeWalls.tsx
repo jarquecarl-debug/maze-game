@@ -1,3 +1,4 @@
+/// <reference types="@react-three/fiber" />
 import { useMemo } from "react";
 import * as THREE from "three";
 import { getWalls, WALL_HEIGHT, CELL_SIZE } from "./mazeData";

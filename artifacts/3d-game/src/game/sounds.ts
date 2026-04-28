@@ -1,12 +1,22 @@
 let ctx: AudioContext | null = null;
+let _muted = false;
+
+export function isMuted(): boolean { return _muted; }
+export function toggleMute(): boolean {
+  _muted = !_muted;
+  // Suspend/resume the AudioContext so no in-flight sounds bleed through
+  if (ctx) _muted ? ctx.suspend() : ctx.resume();
+  return _muted;
+}
 
 function getCtx(): AudioContext {
   if (!ctx) ctx = new AudioContext();
-  if (ctx.state === "suspended") ctx.resume();
+  if (!_muted && ctx.state === "suspended") ctx.resume();
   return ctx;
 }
 
 function tone(freq: number, duration: number, type: OscillatorType = "sine", vol = 0.25) {
+  if (_muted) return;
   const c = getCtx();
   const osc = c.createOscillator();
   const gain = c.createGain();
@@ -21,6 +31,7 @@ function tone(freq: number, duration: number, type: OscillatorType = "sine", vol
 }
 
 function noise(duration: number, freq = 400, vol = 0.15) {
+  if (_muted) return;
   const c = getCtx();
   const buf = c.createBuffer(1, c.sampleRate * duration, c.sampleRate);
   const data = buf.getChannelData(0);
@@ -119,5 +130,23 @@ export function playEnemyNear() {
     gain.connect(c.destination);
     osc.start();
     osc.stop(c.currentTime + 0.4);
+  } catch (_) {}
+}
+
+export function playDash() {
+  try {
+    const c = getCtx();
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(300, c.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(600, c.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.18);
+    osc.connect(gain);
+    gain.connect(c.destination);
+    osc.start();
+    osc.stop(c.currentTime + 0.18);
+    noise(0.08, 800, 0.08);
   } catch (_) {}
 }

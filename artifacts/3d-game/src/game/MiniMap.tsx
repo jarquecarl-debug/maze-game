@@ -17,13 +17,14 @@ export default function MiniMap() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const cellPx = MAP_SIZE / MAZE_SIZE;
-    const [kr, kc] = getKeyCell();
-    const exitRow = MAZE_SIZE - 2;
-    const exitCol = MAZE_SIZE - 2;
-
     function draw() {
       if (!ctx || !canvas) return;
+
+      // Read fresh each frame — these reflect the current maze after level transitions
+      const cellPx = MAP_SIZE / MAZE_SIZE;
+      const [kr, kc] = getKeyCell();
+      const exitRow = MAZE_SIZE - 2;
+      const exitCol = MAZE_SIZE - 2;
 
       ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
 

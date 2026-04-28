@@ -1,3 +1,4 @@
+/// <reference types="@react-three/fiber" />
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -19,34 +20,28 @@ export default function KeyItem() {
 
   return (
     <group ref={groupRef} position={pos}>
-      <pointLight color="#ffd700" intensity={4} distance={8} decay={2} />
+      <pointLight color="#ccaa00" intensity={2} distance={6} decay={2} />  {/* was intensity 4, distance 8 */}
 
       {/* Key bow (ring) */}
       <mesh position={[0, 0.3, 0]}>
-        <torusGeometry args={[0.22, 0.07, 12, 20]} />
-        <meshStandardMaterial color="#ffd700" emissive="#ffaa00" emissiveIntensity={2} metalness={1} roughness={0.1} />
+        <torusGeometry args={[0.22, 0.07, 10, 16]} />  {/* segments 12,20→10,16 */}
+        <meshStandardMaterial color="#ccaa00" emissive="#aa8800" emissiveIntensity={0.8} metalness={1} roughness={0.1} />
       </mesh>
 
       {/* Key shaft */}
       <mesh position={[0, -0.1, 0]}>
         <boxGeometry args={[0.08, 0.6, 0.08]} />
-        <meshStandardMaterial color="#ffd700" emissive="#ffaa00" emissiveIntensity={2} metalness={1} roughness={0.1} />
+        <meshStandardMaterial color="#ccaa00" emissive="#aa8800" emissiveIntensity={0.8} metalness={1} roughness={0.1} />
       </mesh>
 
       {/* Key teeth */}
       <mesh position={[0.1, -0.3, 0]}>
         <boxGeometry args={[0.15, 0.07, 0.07]} />
-        <meshStandardMaterial color="#ffd700" emissive="#ffaa00" emissiveIntensity={2} metalness={1} roughness={0.1} />
+        <meshStandardMaterial color="#ccaa00" emissive="#aa8800" emissiveIntensity={0.8} metalness={1} roughness={0.1} />
       </mesh>
       <mesh position={[0.1, -0.2, 0]}>
         <boxGeometry args={[0.1, 0.07, 0.07]} />
-        <meshStandardMaterial color="#ffd700" emissive="#ffaa00" emissiveIntensity={2} metalness={1} roughness={0.1} />
-      </mesh>
-
-      {/* Glow sphere */}
-      <mesh>
-        <sphereGeometry args={[0.5, 8, 8]} />
-        <meshStandardMaterial color="#ffd700" transparent opacity={0.08} />
+        <meshStandardMaterial color="#ccaa00" emissive="#aa8800" emissiveIntensity={0.8} metalness={1} roughness={0.1} />
       </mesh>
     </group>
   );

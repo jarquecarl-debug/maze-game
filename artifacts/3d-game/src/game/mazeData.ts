@@ -34,10 +34,17 @@ function buildMaze(size: number): number[][] {
   return maze;
 }
 
+// Cached derived values — computed once per maze generation, never stale
+let _cachedKeyCell: [number, number] = [1, 1];
+let _cachedEnemyStartCell: [number, number] = [1, 1];
+
 export function regenerateMaze(level: number) {
   MAZE_SIZE = Math.min(13 + level * 2, 21);
   if (MAZE_SIZE % 2 === 0) MAZE_SIZE--;
   MAZE_LAYOUT = buildMaze(MAZE_SIZE);
+  // Compute and freeze derived values atomically right after maze is built
+  _cachedKeyCell = _computeKeyCell();
+  _cachedEnemyStartCell = _computeEnemyStartCell();
 }
 
 // Boot with level 1
@@ -59,8 +66,8 @@ export function getExitPosition(): [number, number, number] {
   return cellToWorld(MAZE_SIZE - 2, MAZE_SIZE - 2);
 }
 
-/** BFS from (1,1) — returns the open cell nearest to 60% depth, away from start/exit. */
-export function getKeyCell(): [number, number] {
+/** Internal — do not call directly; use getKeyCell() which returns the cached result. */
+function _computeKeyCell(): [number, number] {
   const start: [number, number] = [1, 1];
   const exit: [number, number] = [MAZE_SIZE - 2, MAZE_SIZE - 2];
   const visited = new Map<string, number>();
@@ -95,14 +102,19 @@ export function getKeyCell(): [number, number] {
   return best;
 }
 
+/** Returns the cached key cell for the current maze — always consistent across all callers. */
+export function getKeyCell(): [number, number] {
+  return _cachedKeyCell;
+}
+
 export function getKeyPosition(): [number, number, number] {
   const [r, c] = getKeyCell();
   const pos = cellToWorld(r, c);
-  pos[1] = 1;
+  pos[1] = 0.5;
   return pos;
 }
 
-export function getEnemyStartCell(): [number, number] {
+function _computeEnemyStartCell(): [number, number] {
   const er = MAZE_SIZE - 2, ec = MAZE_SIZE - 2;
   for (const [dr, dc] of [[0, 0], [-1, 0], [0, -1], [-1, -1], [-2, 0], [0, -2], [-2, -2]]) {
     const r = er + dr, c = ec + dc;
@@ -111,6 +123,11 @@ export function getEnemyStartCell(): [number, number] {
     }
   }
   return [er, ec];
+}
+
+/** Returns the cached enemy start cell — consistent with the current maze snapshot. */
+export function getEnemyStartCell(): [number, number] {
+  return _cachedEnemyStartCell;
 }
 
 export function getEnemyStartPosition(): [number, number, number] {

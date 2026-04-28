@@ -8,10 +8,13 @@ import {
   getPlayerStart, getExitPosition, getKeyPosition,
 } from "./mazeData";
 import { sharedState } from "./sharedState";
-import { playCollect, playDamage, playFootstep, playKey } from "./sounds";
+import { playCollect, playDamage, playFootstep, playKey, playDash } from "./sounds";
 
 const BASE_SPEED = 6;
 const SPRINT_SPEED = 10;
+const DASH_SPEED = 28;
+const DASH_DURATION = 0.22;   // seconds of burst
+const DASH_COOLDOWN = 2.0;    // seconds before next dash
 const PLAYER_RADIUS = 0.45;
 const COLLECT_RADIUS = 1.5;
 const OBSTACLE_RADIUS = 1.2;
@@ -46,24 +49,36 @@ export default function Player({ onLockChange }: PlayerProps) {
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
   const posRef = useRef(new THREE.Vector3());
-  const keysRef = useRef({ forward: false, back: false, left: false, right: false, sprint: false });
+  const keysRef = useRef({ forward: false, back: false, left: false, right: false, sprint: false, dash: false });
+  const dashTimeRef = useRef(0);      // remaining dash burst time
+  const dashDirRef  = useRef(new THREE.Vector3(0, 0, -1)); // locked dash direction
   const localCollectedRef = useRef(new Set<string>());
   const keyCollectedRef = useRef(false);
   const damageCooldown = useRef(0);
   const timeSyncAccum = useRef(0);
   const footstepTimer = useRef(0);
   const noKeyNotifCooldown = useRef(0);
-  const prevDamageTime = useRef(0);
 
   const gameState = useGameStore((s) => s.gameState);
 
   useEffect(() => {
-    if (gameState === "playing") {
+    // Detect touch/mobile once on mount
+    sharedState.isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  }, []);
+
+  const prevGameState = useRef<string>("menu");
+
+  useEffect(() => {
+    const wasJustResumed = gameState === "playing" && prevGameState.current === "paused";
+    prevGameState.current = gameState;
+
+    if (gameState === "playing" && !wasJustResumed) {
+      // Fresh start — reset everything
       const [sx, , sz] = getPlayerStart();
       posRef.current.set(sx, EYE_HEIGHT, sz);
       camera.position.set(sx, EYE_HEIGHT, sz);
       camera.rotation.set(0, 0, 0);
-      keysRef.current = { forward: false, back: false, left: false, right: false, sprint: false };
+      keysRef.current = { forward: false, back: false, left: false, right: false, sprint: false, dash: false };
       localCollectedRef.current = new Set();
       keyCollectedRef.current = false;
       damageCooldown.current = 0;
@@ -71,8 +86,16 @@ export default function Player({ onLockChange }: PlayerProps) {
       footstepTimer.current = 0;
       noKeyNotifCooldown.current = 0;
       sharedState.stamina = 100;
+      sharedState.mobileJoyX = 0;
+      sharedState.mobileJoyY = 0;
+      sharedState.mobileLookDX = 0;
+      sharedState.mobileLookDY = 0;
+      dashTimeRef.current = 0;
+      sharedState.dashCooldown = 0;
+      sharedState.isDashing = false;
     }
-    if (gameState !== "playing") controlsRef.current?.unlock();
+
+    if (gameState !== "playing" && gameState !== "paused") controlsRef.current?.unlock();
   }, [gameState, camera]);
 
   useEffect(() => {
@@ -82,6 +105,12 @@ export default function Player({ onLockChange }: PlayerProps) {
       if (e.code === "KeyA" || e.code === "ArrowLeft")  keysRef.current.left    = true;
       if (e.code === "KeyD" || e.code === "ArrowRight") keysRef.current.right   = true;
       if (e.code === "ShiftLeft" || e.code === "ShiftRight") keysRef.current.sprint = true;
+      if (e.code === "Space") keysRef.current.dash = true;
+      if (e.code === "Escape") {
+        const { gameState, pauseGame, resumeGame } = useGameStore.getState();
+        if (gameState === "playing") { pauseGame(); controlsRef.current?.unlock(); }
+        else if (gameState === "paused") resumeGame();
+      }
     };
     const onUp = (e: KeyboardEvent) => {
       if (e.code === "KeyW" || e.code === "ArrowUp")    keysRef.current.forward = false;
@@ -89,6 +118,7 @@ export default function Player({ onLockChange }: PlayerProps) {
       if (e.code === "KeyA" || e.code === "ArrowLeft")  keysRef.current.left    = false;
       if (e.code === "KeyD" || e.code === "ArrowRight") keysRef.current.right   = false;
       if (e.code === "ShiftLeft" || e.code === "ShiftRight") keysRef.current.sprint = false;
+      if (e.code === "Space") keysRef.current.dash = false;
     };
     document.addEventListener("keydown", onDown);
     document.addEventListener("keyup", onUp);
@@ -104,17 +134,59 @@ export default function Player({ onLockChange }: PlayerProps) {
     footstepTimer.current = Math.max(0, footstepTimer.current - delta);
 
     const locked = controlsRef.current?.isLocked ?? false;
+    const mobile = sharedState.isMobile;
+    const canMove = locked || mobile;
     let moving = false;
 
-    if (locked) {
+    if (canMove) {
+      // === Dash ===
+      sharedState.dashCooldown = Math.max(0, sharedState.dashCooldown - delta);
+      const wantDash = keysRef.current.dash && sharedState.dashCooldown <= 0 && !sharedState.isDashing;
+      if (wantDash) {
+        // Lock dash direction: current move dir or camera forward
+        const fwdD = new THREE.Vector3();
+        camera.getWorldDirection(fwdD); fwdD.y = 0; fwdD.normalize();
+        const rightD = new THREE.Vector3().crossVectors(fwdD, new THREE.Vector3(0, 1, 0)).normalize();
+        const dashDir = new THREE.Vector3();
+        if (keysRef.current.forward) dashDir.add(fwdD);
+        if (keysRef.current.back)    dashDir.sub(fwdD);
+        if (keysRef.current.left)    dashDir.sub(rightD);
+        if (keysRef.current.right)   dashDir.add(rightD);
+        if (dashDir.length() === 0)  dashDir.copy(fwdD); // default: dash forward
+        dashDirRef.current.copy(dashDir.normalize());
+        dashTimeRef.current = DASH_DURATION;
+        sharedState.dashCooldown = DASH_COOLDOWN;
+        sharedState.isDashing = true;
+        keysRef.current.dash = false;
+        playDash();
+      }
+
+      // Tick dash burst
+      if (sharedState.isDashing) {
+        dashTimeRef.current -= delta;
+        if (dashTimeRef.current <= 0) sharedState.isDashing = false;
+      }
+
       // === Sprint & stamina ===
-      const wantSprint = keysRef.current.sprint && sharedState.stamina > 5;
+      const wantSprint = (keysRef.current.sprint || sharedState.mobileSprint) && sharedState.stamina > 5 && !sharedState.isDashing;
       if (wantSprint) {
         sharedState.stamina = Math.max(0, sharedState.stamina - STAMINA_DRAIN * delta);
       } else {
         sharedState.stamina = Math.min(100, sharedState.stamina + STAMINA_REGEN * delta);
       }
-      const speed = wantSprint ? SPRINT_SPEED : BASE_SPEED;
+      const speed = sharedState.isDashing ? DASH_SPEED : wantSprint ? SPRINT_SPEED : BASE_SPEED;
+
+      // === Camera look (mobile touch drag) ===
+      if (mobile && (sharedState.mobileLookDX !== 0 || sharedState.mobileLookDY !== 0)) {
+        const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+        euler.y -= sharedState.mobileLookDX;
+        euler.x -= sharedState.mobileLookDY;
+        euler.x  = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, euler.x));
+        euler.z  = 0;
+        camera.quaternion.setFromEuler(euler);
+        sharedState.mobileLookDX = 0;
+        sharedState.mobileLookDY = 0;
+      }
 
       // === Movement ===
       const fwd = new THREE.Vector3();
@@ -122,10 +194,21 @@ export default function Player({ onLockChange }: PlayerProps) {
       fwd.y = 0; fwd.normalize();
       const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
       const move = new THREE.Vector3();
-      if (keysRef.current.forward) move.add(fwd);
-      if (keysRef.current.back)    move.sub(fwd);
-      if (keysRef.current.left)    move.sub(right);
-      if (keysRef.current.right)   move.add(right);
+
+      if (sharedState.isDashing) {
+        // Use the locked dash direction — ignore input during burst
+        move.copy(dashDirRef.current);
+      } else {
+        if (keysRef.current.forward) move.add(fwd);
+        if (keysRef.current.back)    move.sub(fwd);
+        if (keysRef.current.left)    move.sub(right);
+        if (keysRef.current.right)   move.add(right);
+
+        if (mobile) {
+          if (Math.abs(sharedState.mobileJoyY) > 0.15) move.addScaledVector(fwd,  -sharedState.mobileJoyY);
+          if (Math.abs(sharedState.mobileJoyX) > 0.15) move.addScaledVector(right, sharedState.mobileJoyX);
+        }
+      }
 
       if (move.length() > 0) {
         move.normalize().multiplyScalar(speed * delta);
@@ -146,7 +229,6 @@ export default function Player({ onLockChange }: PlayerProps) {
     }
 
     // === Update shared state ===
-    const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
     sharedState.bearing = (Math.atan2(dir.x, -dir.z) * 180 / Math.PI + 360) % 360;
@@ -165,7 +247,7 @@ export default function Player({ onLockChange }: PlayerProps) {
         localCollectedRef.current.add(c.id);
         store.collectItem(c.id, c.points);
         playCollect(c.type);
-        const labels: Record<string, string> = { gem: "💎 +50", coin: "🪙 +10", star: "⭐ +100" };
+        const labels: Record<string, string> = { gem: "💎 +50", coin: "🟡 +10", star: "⭐ +100" };
         store.addNotification(labels[c.type] || `+${c.points}`, "#ffd700");
       }
     }
@@ -190,8 +272,9 @@ export default function Player({ onLockChange }: PlayerProps) {
         if (dx * dx + dz * dz < OBSTACLE_RADIUS * OBSTACLE_RADIUS) {
           store.takeDamage(o.damage);
           playDamage();
-          const labels: Record<string, string> = { spike: "🗡 Spike!", fire: "🔥 Fire!", poison: "☠ Poison!" };
-          store.addNotification(labels[o.type] || "Ouch!", "#ff4444");
+          const labels: Record<string, string> = { spike: "🗡 Spiked", fire: "🔥 Burned", poison: "☠ Poisoned" };
+          const colors: Record<string, string> = { spike: "#c0c0c0", fire: "#ff6600", poison: "#00cc44" };
+          store.addNotification(labels[o.type] || "Ouch!", colors[o.type] || "#ff4444");
           damageCooldown.current = 1.5;
           break;
         }
@@ -221,6 +304,10 @@ export default function Player({ onLockChange }: PlayerProps) {
   });
 
   if (gameState !== "playing") return null;
+
+  // PointerLockControls is desktop-only — mobile uses touch input directly
+  if (sharedState.isMobile) return null;
+
   return (
     <PointerLockControls
       ref={controlsRef}

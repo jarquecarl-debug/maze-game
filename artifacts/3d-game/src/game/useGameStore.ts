@@ -7,7 +7,7 @@ import {
   type ObstacleData,
 } from "./mazeData";
 
-export type GameState = "menu" | "playing" | "won" | "lost" | "highscores";
+export type GameState = "menu" | "playing" | "paused" | "won" | "lost" | "highscores";
 
 export interface HighScore {
   score: number;
@@ -50,6 +50,8 @@ interface GameStore {
 
   startGame: () => void;
   resetGame: () => void;
+  pauseGame: () => void;
+  resumeGame: () => void;
   nextLevel: () => void;
   collectItem: (id: string, points: number) => void;
   collectKey: () => void;
@@ -78,6 +80,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startGame: () => {
     regenerateMaze(1);
+    // Single atomic set — store and globals are always in sync after this
     set({
       gameState: "playing",
       level: 1,
@@ -96,10 +99,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   resetGame: () => set({ gameState: "menu", notifications: [] }),
 
+  pauseGame: () => {
+    if (get().gameState === "playing") set({ gameState: "paused" });
+  },
+
+  resumeGame: () => {
+    if (get().gameState === "paused") set({ gameState: "playing" });
+  },
+
   nextLevel: () => {
     const { level, score } = get();
     const next = level + 1;
     regenerateMaze(next);
+    // Single atomic set — globals and store stay in sync
     set({
       gameState: "playing",
       level: next,
@@ -116,13 +128,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  collectItem: (id, points) => {
-    const { collectedIds, score } = get();
-    if (collectedIds.has(id)) return;
-    const next = new Set(collectedIds);
-    next.add(id);
-    set({ collectedIds: next, score: score + points });
-  },
+  collectItem: (id, points, type?: string) => {
+  const { collectedIds, score } = get();
+  if (collectedIds.has(id)) return;
+  const next = new Set(collectedIds);
+  next.add(id);
+  set({ collectedIds: next, score: score + points });
+},
 
   collectKey: () => {
     set({ hasKey: true });

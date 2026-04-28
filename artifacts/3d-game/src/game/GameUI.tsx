@@ -118,7 +118,7 @@ function HighScoresScreen() {
 }
 
 export default function GameUI() {
-  const { gameState, score, timeElapsed, level, startGame, resetGame, nextLevel } = useGameStore();
+  const { gameState, score, timeElapsed, level, startGame, resetGame, nextLevel, resumeGame } = useGameStore();
   const minutes = Math.floor(timeElapsed / 60);
   const seconds = Math.floor(timeElapsed % 60);
   const timeStr = `${minutes}:${seconds.toString().padStart(2, "0")}`;
@@ -131,6 +131,52 @@ export default function GameUI() {
         <Notifications />
         <style>{`@keyframes slideIn { from { opacity:0; transform:translateY(-12px);} to { opacity:1; transform:translateY(0);} }`}</style>
       </>
+    );
+  }
+
+  if (gameState === "paused") {
+    return (
+      <div style={{
+        position: "fixed", inset: 0, display: "flex", alignItems: "center",
+        justifyContent: "center", zIndex: 200,
+        background: "rgba(0,0,0,0.75)",
+        backdropFilter: "blur(4px)",
+        fontFamily: "sans-serif",
+      }}>
+        <div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 52, marginBottom: 8 }}>⏸</div>
+          <h1 style={{ color: "#fff", fontSize: 42, fontWeight: 900, margin: "0 0 8px 0" }}>PAUSED</h1>
+          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 32 }}>
+            Press Esc or click Resume to continue
+          </p>
+          <button
+            onClick={() => {
+              resumeGame();
+              document.querySelector("canvas")?.requestPointerLock();
+            }}
+            style={{
+              background: "linear-gradient(135deg,#7700ff,#00aaff)", color: "#fff",
+              border: "none", padding: "14px 48px", fontSize: 18,
+              fontWeight: 700, borderRadius: 12, cursor: "pointer",
+              letterSpacing: 2, textTransform: "uppercase",
+              boxShadow: "0 0 30px rgba(119,0,255,0.4)",
+              marginBottom: 12, display: "block", width: "100%",
+            }}
+          >
+            ▶ Resume
+          </button>
+          <button
+            onClick={resetGame}
+            style={{
+              background: "rgba(255,255,255,0.08)", color: "#aaa",
+              border: "1px solid rgba(255,255,255,0.15)", padding: "12px 32px",
+              fontSize: 15, borderRadius: 12, cursor: "pointer", width: "100%",
+            }}
+          >
+            ✕ Quit to Menu
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -161,12 +207,42 @@ export default function GameUI() {
                 background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "16px 20px",
                 marginBottom: 28, border: "1px solid rgba(255,255,255,0.08)", textAlign: "left",
               }}>
-                <div style={{ color: "#aaa", fontSize: 13, lineHeight: 2.2 }}>
-                  🗝 &nbsp;Collect the <span style={{ color: "#ffd700" }}>golden key</span> to unlock the exit portal<br />
-                  💎 &nbsp;<span style={{ color: "#ff88ff" }}>Gems</span> +50 · <span style={{ color: "#ffd700" }}>Coins</span> +10 · <span style={{ color: "#00ffff" }}>Stars</span> +100<br />
-                  👾 &nbsp;An <span style={{ color: "#ff4444" }}>enemy</span> hunts you — run from it!<br />
-                  ⌨ &nbsp;WASD to move · <strong style={{ color: "#fff" }}>Shift</strong> to sprint · Mouse to look
-                </div>
+                <div style={{ color: "#aaa", fontSize: 13, lineHeight: 2.4 }}>
+                <span style={{ color: "#ffd700", fontSize: 16 }}>🗝</span>
+                &nbsp;Collect the <span style={{ color: "#ffd700", fontWeight: 700 }}>golden key</span> to unlock the exit portal<br />
+
+                {/* Gem icon — purple diamond */}
+                <svg width="14" height="14" viewBox="0 0 14 14" style={{ display:"inline-block", verticalAlign:"middle", marginRight:4 }}>
+                  <polygon points="7,0 13,5 7,14 1,5" fill="#9900ff" opacity="0.9"/>
+                  <polygon points="7,0 13,5 7,5 1,5" fill="#cc44ff" opacity="0.6"/>
+                </svg>
+                <span style={{ color: "#cc88ff" }}>Gems</span> +50 &nbsp;·&nbsp;
+
+                {/* Coin icon — gold circle */}
+                <svg width="14" height="14" viewBox="0 0 14 14" style={{ display:"inline-block", verticalAlign:"middle", marginRight:4 }}>
+                  <circle cx="7" cy="7" r="6.5" fill="#ccaa00"/>
+                  <circle cx="7" cy="7" r="5.2" fill="#ffcc22"/>
+                  <circle cx="7" cy="7" r="4" fill="#ffdd55"/>
+                  <ellipse cx="5.5" cy="5" rx="1.5" ry="2.5" fill="rgba(255,255,255,0.18)" transform="rotate(-30 5.5 5)"/>
+                </svg>
+                <span style={{ color: "#ffd700" }}>Coins</span> +10 &nbsp;·&nbsp;
+
+                {/* Star icon — cyan 6-pointed */}
+                <svg width="14" height="14" viewBox="0 0 14 14" style={{ display:"inline-block", verticalAlign:"middle", marginRight:4 }}>
+                  {(() => {
+                    const pts = Array.from({length:12}, (_,i) => {
+                      const a = (i * Math.PI) / 6 - Math.PI/2;
+                      const r = i%2===0 ? 7 : 3.2;
+                      return `${7 + Math.cos(a)*r},${7 + Math.sin(a)*r}`;
+                    }).join(" ");
+                    return <polygon points={pts} fill="#00aacc"/>;
+                  })()}
+                </svg>
+                <span style={{ color: "#00ffff" }}>Stars</span> +100<br />
+
+                👾 &nbsp;An <span style={{ color: "#ff4444" }}>enemy</span> hunts you — run from it!<br />
+                ⌨ &nbsp;WASD to move · <strong style={{ color: "#fff" }}>Shift</strong> to sprint · <strong style={{ color: "#fff" }}>Space</strong> to dash · Mouse to look
+              </div>
               </div>
               <button onClick={startGame} style={{
                 background: "linear-gradient(135deg,#7700ff,#00aaff)", color: "#fff",
