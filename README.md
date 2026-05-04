@@ -17,28 +17,28 @@ A first-person 3D maze game built with React, Three.js, and React Three Fiber. N
 ![Homepage](./screenshots/homepage.png)
 
 ### 🎮 Gameplay
-![Gameplay](./screenshots/gameplay.png)
-
-### 👻 Wraith Enemy
-![Wraith Enemy](./screenshots/wraith.png)
+![Gameplay](./screenshots/Gameplay.png)
 
 ### 🗝️ Key Item
-![Key Item](./screenshots/key.png)
+![Key Item](./screenshots/Key-item.png)
 
 ### 🌀 Exit Portal
-![Exit Portal](./screenshots/portal.png)
+![Exit Portal](./screenshots/Portal.png)
+
+### 👻 Wraith Enemy
+![Wraith Enemy](./screenshots/Wraith.png)
+
+### 🔴 Red Crystal Spikes
+![Red Crystal Spikes](./screenshots/Spikes.png)
 
 ### 🔥 Fire Obstacle
-![Fire Obstacle](./screenshots/fire.png)
-
-### ❄️ Ice Spikes
-![Ice Spikes](./screenshots/ice_spikes.png)
+![Fire Obstacle](./screenshots/Fire-obstacle.png)
 
 ### ☠️ Poison Obstacle
-![Poison Obstacle](./screenshots/poison.png)
+![Poison Obstacle](./screenshots/Poison-obstacle.png)
 
 ### 🗺️ Minimap & HUD
-![Minimap HUD](./screenshots/hud.png)
+![Minimap HUD](./screenshots/Minimap-hud.png)
 
 ---
 
