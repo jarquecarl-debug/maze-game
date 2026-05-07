@@ -3,7 +3,6 @@
 A first-person 3D maze game built with React, Three.js, and React Three Fiber. Navigate dark atmospheric mazes, collect items, avoid a BFS-powered wraith enemy, and find the exit before it finds you.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-maze--game--3d.netlify.app-blueviolet?style=flat-square&logo=netlify&logoColor=white)](https://maze-game-3d.netlify.app)
-[![GitHub](https://img.shields.io/badge/GitHub-jarquecarl-181717?style=flat-square&logo=github)](https://github.com/jarquecarl/maze-game)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)
 ![Three.js](https://img.shields.io/badge/Three.js-r128-000000?style=flat-square&logo=three.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)
